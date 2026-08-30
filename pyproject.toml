@@ -2,6 +2,9 @@
 name = "polars-benchmark-modal"
 version = "0.1.0"
 description = "Run the Polars PDS-H benchmark on Modal"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Modal Labs, Inc." }]
 requires-python = ">=3.10"
 dependencies = ["modal"]
 

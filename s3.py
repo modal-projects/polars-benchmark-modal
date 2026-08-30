@@ -78,6 +78,9 @@ def received_bytes() -> int:
 @app.function(
     image=image,
     env={**pdsh.FUNCTION_ENV, "RESULTS_VOLUME_NAME": RESULTS_VOLUME_NAME},
+    secrets=[]
+    if pdsh.S3_ROLE_ARN
+    else [modal.Secret.from_name("aws-secret")],
     timeout=24 * 3600,
     volumes={RESULTS_DIR: results_volume},
 )
