@@ -1,0 +1,13 @@
+[project]
+name = "polars-benchmark-modal"
+version = "0.1.0"
+description = "Run the Polars PDS-H benchmark on Modal"
+requires-python = ">=3.10"
+dependencies = ["modal"]
+
+[project.optional-dependencies]
+charts = ["matplotlib"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
