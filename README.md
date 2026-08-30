@@ -7,11 +7,11 @@ from your own S3 bucket.
 It measures one decision: where the queries read their input from. The same
 upstream benchmark is wired three ways.
 
-| file | input path | |
-|---|---|---|
-| [`volume.py`](volume.py) | a Modal Volume, filled from S3 once | recommended |
-| [`cbm.py`](cbm.py) | a `CloudBucketMount`, on every read | for comparison |
-| [`s3.py`](s3.py) | `s3://` straight from Polars, on every read | the baseline |
+| file | input path |
+|---|---|
+| [`volume.py`](volume.py) | a Modal Volume, filled from S3 once (recommended) |
+| [`cbm.py`](cbm.py) | a `CloudBucketMount`, on every read |
+| [`s3.py`](s3.py) | `s3://` straight from Polars, on every read |
 
 [`pdsh.py`](pdsh.py) holds the shared image, Polars settings and query runner;
 [`prepare_data.py`](prepare_data.py) generates the dataset if you lack one.
@@ -66,22 +66,23 @@ Scaling is sublinear. Eight times the cores buys 1.8x on the 22-query total
 (70.7s to 38.6s) at 4.6x the price, so the small container is the sensible
 default.
 
-How to read these numbers:
+Volume and direct-S3 bytes are measured, one as a file copy and the other from
+the container's own network counters. The mount's are not, because those
+counters stay near zero while it streams, so its transfer is a range from one
+pass over the dataset to no reuse at all. Count it from the bucket side
+instead (CloudWatch `BytesDownloaded`).
 
-- Volume and direct-S3 bytes are measured, one as a file copy and the other from
-  the container's own network counters. The mount's are not, because those
-  counters stay near zero while it streams, so its transfer is a range from one
-  pass over the dataset to no reuse at all. Count it from the bucket side
-  instead (CloudWatch `BytesDownloaded`).
-- Dollars use $0.09/GB internet egress, $0.0000131 per core-second and
-  $0.00000222 per GiB-second, unpinned so no region multiplier. Substitute your
-  own egress rate and the shape holds.
-- One container per run, not a cluster, landing wherever Modal had capacity
-  rather than next to the bucket. Repeats varied 10% to 20% in wall time, so
-  treat small differences as noise.
+Dollars use $0.09/GB internet egress, $0.0000131 per core-second and
+$0.00000222 per GiB-second, unpinned so no region multiplier. Substitute your
+own egress rate and the shape holds.
+
+One container per run, not a cluster, landing wherever Modal had capacity
+rather than next to the bucket. Repeats varied 10% to 20% in wall time, so
+treat small differences as noise.
 
 Regenerate the charts with
-`pip install -e '.[charts]' && python docs/make_charts.py`.
+`pip install -e '.[charts]' && python docs/make_charts.py` or
+`uv sync --extra charts && uv run python docs/make_charts.py`.
 
 ## Keeping the cache fresh
 
@@ -100,8 +101,9 @@ tree is under the prefix, so a rewritten partition costs one file, not a table.
 ## Setup
 
 ```bash
+# in this repo
 git clone https://github.com/pola-rs/polars-benchmark   # the benchmark itself
-pip install modal && modal setup
+pip install modal && modal setup            # or: uv pip install modal && modal setup
 
 export S3_BUCKET=your-bucket
 export S3_ROLE_ARN=arn:aws:iam::...:role/your-role      # optional, see below
@@ -158,3 +160,7 @@ the sweep before settling on a size.
 - Runs are single-container. Polars' distributed engine spreads the same queries
   over many workers, where the cache matters more: each worker would otherwise
   re-read from S3 independently.
+
+## License
+
+Apache 2.0. See [`LICENSE`](LICENSE).
