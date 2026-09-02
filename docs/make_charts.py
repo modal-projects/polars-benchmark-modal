@@ -100,12 +100,12 @@ def input_path_chart() -> Path:
 
     fig, ax = plt.subplots(figsize=(7.4, 3.2))
     width = 0.27
-    slots = range(23)
+    slots = [*range(22), 23]
     for index, (label, seconds) in enumerate(INPUT_PATH_SECONDS.items()):
         values = [*seconds.values(), geomeans[index]]
         positions = [slot + (index - 1) * width for slot in slots]
         ax.bar(positions, values, width=width, color=COLORS[index], zorder=2)
-    ax.axvline(21.5, color="#d5d8e0", linewidth=1, zorder=1)
+    ax.axvline(22, color="#d5d8e0", linewidth=1, zorder=1)
     ax.set_yscale("log")
     ax.set_ylim(0.2, 200)
     ax.set_xticks(
@@ -201,16 +201,10 @@ def cost_chart() -> Path:
                 color=COLORS[2],
                 hatch="///",
                 edgecolor="#8d929e",
-                label="transfer not measurable" if position == 6 else None,
+                label="transfer not measurable (modeled range)"
+                if position == 6
+                else None,
                 zorder=2,
-            )
-            ax.text(
-                2.0,
-                position,
-                "transfer not measurable",
-                va="center",
-                fontsize=7,
-                color="#525866",
             )
             ax.text(34.44 * 1.04, position, "34.44 upper bound (modeled)", va="center")
         else:
@@ -228,7 +222,7 @@ def cost_chart() -> Path:
             formatted = f"${total:.3f}" if total < 1 else f"${total:.2f}"
             ax.text(total * 1.06, position, formatted, va="center", fontsize=8)
     ax.set_xscale("log")
-    ax.set_xlim(0.01, 45)
+    ax.set_xlim(0.01, 60)
     ax.set_yticks(positions, [row[0] for row in COST_ROWS], fontsize=8)
     ax.invert_yaxis()
     ax.set_xticks([0.01, 0.1, 1, 10], ["$0.01", "$0.10", "$1", "$10"])
@@ -238,7 +232,13 @@ def cost_chart() -> Path:
         "Cost per 22-query run",
         "compute + S3 transfer, log scale, transfer upper bound is modeled",
     )
-    ax.legend(frameon=False, loc="lower right", fontsize=7)
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.18),
+        ncols=3,
+        fontsize=7,
+    )
     path = OUT_DIR / "cost.png"
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
@@ -266,7 +266,11 @@ def cumulative_cost_chart() -> Path:
     ax.set_ylim(0.01, 500)
     ax.set_xticks(runs)
     ax.set_xlabel("suite runs")
-    ax.set_ylabel("cumulative cost")
+    ax.set_yticks(
+        [0.01, 0.1, 1, 10, 100],
+        ["$0.01", "$0.10", "$1", "$10", "$100"],
+    )
+    ax.set_ylabel("cumulative cost, dollars")
     ax.grid(axis="y", color="#eceef3", zorder=1)
     ax.text(
         0.03,
