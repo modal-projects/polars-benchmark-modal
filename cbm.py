@@ -38,9 +38,14 @@ results_volume = modal.Volume.from_name(RESULTS_VOLUME_NAME, create_if_missing=T
         RESULTS_DIR: results_volume,
         pdsh.BUCKET_DIR: pdsh.bucket_mount(read_only=True),
     },
+    cloud=pdsh.PIN_CLOUD,
+    region=pdsh.PIN_REGION,
 )
 def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
     """Run selected PDS-H queries directly against the CloudBucketMount."""
+    read_throughput = pdsh.read_throughput(
+        pdsh.BUCKET_DIR / pdsh.S3_PREFIX / f"scale-{scale}"
+    )
     run_dir = f"{label}-{time.time_ns()}" if label else str(time.time_ns())
     timings_dir = RESULTS_DIR / f"scale-{scale}" / run_dir
     return {
@@ -50,6 +55,7 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
             queries,
             {"PATH_TABLES": str(pdsh.BUCKET_DIR / pdsh.S3_PREFIX)},
         ),
+        "read_throughput": read_throughput,
         "region": os.environ.get("MODAL_REGION"),
     }
 

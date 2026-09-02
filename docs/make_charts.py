@@ -1,12 +1,13 @@
-"""Render the charts in README.md from the measurements taken with this repo.
+"""Render the four charts used in README.md.
 
-``python docs/make_charts.py`` writes ``docs/input-path.png``, ``docs/bytes.png``,
-``docs/cost.png``, ``docs/cumulative-cost.png`` and ``docs/queries.png``.
-Requires matplotlib.
+``python docs/make_charts.py`` writes only the PNG files in ``docs/``. The
+measurements are kept in this module so chart regeneration needs no network or
+benchmark artifacts.
 """
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import matplotlib
@@ -15,65 +16,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 OUT_DIR = Path(__file__).parent
-
-# Scale factor 100, 4 CPU / 16 GiB: q1..q22 seconds within the 22-query suite,
-# by input path.
-# fmt: off
-INPUT_PATH_SECONDS = {
-    "Modal Volume": [
-        3.19, 0.28, 5.54, 3.78, 2.86, 0.85, 4.24, 2.64, 5.90, 2.96, 0.48,
-        1.33, 3.66, 1.19, 1.09, 0.65, 1.45, 5.38, 1.91, 2.57, 17.75, 1.00,
-    ],
-    "Direct S3": [
-        55.65, 11.48, 124.85, 47.74, 105.91, 58.87, 110.77, 110.90, 113.70,
-        112.93, 6.05, 64.31, 30.51, 95.64, 78.95, 8.34, 74.87, 89.56, 106.48,
-        101.41, 196.94, 5.81,
-    ],
-    "CloudBucketMount": [
-        196.19, 53.39, 344.98, 191.67, 520.85, 245.49, 313.99, 437.22, 413.91,
-        286.60, 17.80, 229.96, 82.98, 282.43, 272.02, 11.13, 268.80, 233.01,
-        374.92, 296.19, 567.47, 32.54,
-    ],
-}
-# fmt: on
-
-# Geometric mean of the same three suites, in seconds.
-INPUT_PATH_GEOMEAN = (2.10, 55.45, 182.17)
-
-# GB read out of the bucket per 22-query run.
-S3_GB_PER_RUN = {
-    "Modal Volume\n(first run only)": 26.5,
-    "Direct S3\n(every run)": 344.6,
-}
-
-# Dollars per 22-query run at 4 CPU / 16 GiB, compute plus S3 transfer at
-# $0.09/GB, as (low, high). Only the mount's transfer has to be bounded rather
-# than measured, so only its bar spans a range.
-RUN_COST = {
-    "Volume, warm": (0.015, 0.015),
-    "Volume, first run": (2.41, 2.41),
-    "CloudBucketMount": (3.53, 35.58),
-    "Direct S3": (31.32, 31.32),
-}
-
-# Warm-Volume query seconds for q1..q22, by requested resources.
-# fmt: off
-QUERY_SECONDS = {
-    "4 CPU / 16 GiB": [
-        3.19, 0.28, 5.54, 3.78, 2.86, 0.85, 4.24, 2.64, 5.90, 2.96, 0.48,
-        1.33, 3.66, 1.19, 1.09, 0.65, 1.45, 5.38, 1.91, 2.57, 17.75, 1.00,
-    ],
-    "8 CPU / 32 GiB": [
-        2.74, 0.28, 4.77, 3.18, 2.54, 0.77, 3.60, 2.52, 5.74, 2.82, 0.45,
-        1.21, 3.03, 1.00, 0.94, 0.55, 1.29, 5.32, 1.49, 2.32, 16.17, 1.16,
-    ],
-    "32 CPU / 128 GiB": [
-        1.49, 0.33, 3.21, 2.18, 1.47, 0.57, 2.27, 1.86, 3.36, 1.55, 0.43,
-        0.79, 1.98, 0.64, 0.77, 0.38, 0.77, 2.42, 0.86, 1.43, 8.92, 0.93,
-    ],
-}
-# fmt: on
-
 COLORS = ("#4b57d8", "#8f97e8", "#c9ccd6")
 TEXT_COLOR = "#1c1e26"
 
@@ -93,8 +35,49 @@ plt.rcParams.update(
     }
 )
 
+READ_SPEED = {
+    "Modal Volume": {"pinned": 2.42, "unpinned": 2.31},
+    "CloudBucketMount": {"pinned": 0.57, "unpinned": 0.36},
+    "s3:// (boto3, 8 streams)": {"pinned": 0.23, "unpinned": 0.19},
+}
 
-def title(ax, heading: str, subheading: str) -> None:
+COST_ROWS = (
+    ("Volume warm, unpinned", 0.014, 0.0),
+    ("Volume warm, pinned", 0.049, 0.0),
+    ("Volume first fill, pinned", 0.062, 0.0),
+    ("Volume first fill, unpinned", 0.036, 2.39),
+    ("s3://, pinned", 0.390, 0.0),
+    ("s3://, unpinned", 0.305, 31.01),
+    ("CloudBucketMount, unpinned", 1.14, None),
+)
+
+# fmt: off
+INPUT_PATH_SECONDS = {
+    "Volume warm unpinned": {
+        1: 3.24, 2: 0.31, 3: 4.80, 4: 3.22, 5: 3.22, 6: 1.06,
+        7: 4.39, 8: 3.04, 9: 6.53, 10: 3.13, 11: 0.65, 12: 1.49,
+        13: 3.89, 14: 1.23, 15: 1.22, 16: 0.79, 17: 1.64, 18: 4.98,
+        19: 1.91, 20: 2.93, 21: 17.39, 22: 1.46,
+    },
+    "Volume warm pinned": {
+        1: 5.29, 2: 0.61, 3: 13.41, 4: 6.54, 5: 4.61, 6: 1.70,
+        7: 9.69, 8: 5.34, 9: 11.95, 10: 4.92, 11: 1.16, 12: 2.75,
+        13: 8.28, 14: 2.25, 15: 2.38, 16: 1.31, 17: 2.61, 18: 10.27,
+        19: 3.43, 20: 6.00, 21: 34.16, 22: 2.53,
+    },
+    "s3:// pinned": {
+        1: 36.00, 2: 5.59, 3: 79.37, 4: 37.61, 5: 63.22, 6: 36.55,
+        7: 69.38, 8: 66.10, 9: 71.43, 10: 68.33, 11: 4.05, 12: 38.34,
+        13: 25.42, 14: 57.64, 15: 45.62, 16: 4.02, 17: 45.29, 18: 53.49,
+        19: 65.02, 20: 61.08, 21: 122.95, 22: 6.56,
+    },
+}
+# fmt: on
+
+EXPECTED_GEOMEANS = (2.28, 4.23, 35.12)
+
+
+def chart_title(ax, heading: str, subheading: str) -> None:
     ax.set_title(heading, loc="left", fontsize=10, pad=24)
     ax.text(
         0,
@@ -107,179 +90,208 @@ def title(ax, heading: str, subheading: str) -> None:
     )
 
 
-def legend(ax, labels, colors) -> None:
-    ax.legend(
-        handles=[
-            plt.Rectangle((0, 0), 1, 1, color=color, label=label)
-            for label, color in zip(labels, colors)
-        ],
-        frameon=False,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.1),
-        ncols=len(labels),
-        fontsize=8,
-    )
-
-
 def input_path_chart() -> Path:
-    """All 22 queries on the three input paths, and the geometric mean of each."""
+    """Compare each query on the two Volume placements and direct S3."""
+    geomeans = []
+    for index, seconds in enumerate(INPUT_PATH_SECONDS.values()):
+        geomean = math.exp(sum(math.log(value) for value in seconds.values()) / 22)
+        assert round(geomean, 2) == EXPECTED_GEOMEANS[index]
+        geomeans.append(geomean)
+
     fig, ax = plt.subplots(figsize=(7.4, 3.2))
     width = 0.27
     slots = range(23)
-    for index, seconds in enumerate(INPUT_PATH_SECONDS.values()):
-        values = [*seconds, INPUT_PATH_GEOMEAN[index]]
+    for index, (label, seconds) in enumerate(INPUT_PATH_SECONDS.items()):
+        values = [*seconds.values(), geomeans[index]]
         positions = [slot + (index - 1) * width for slot in slots]
         ax.bar(positions, values, width=width, color=COLORS[index], zorder=2)
     ax.axvline(21.5, color="#d5d8e0", linewidth=1, zorder=1)
     ax.set_yscale("log")
-    ax.set_ylim(0.2, 1200)
+    ax.set_ylim(0.2, 200)
     ax.set_xticks(
         slots,
-        [f"q{query}" for query in range(1, 23)] + ["geo.\nmean"],
+        [f"q{query}" for query in range(1, 23)] + ["geomean"],
         fontsize=7,
     )
-    ax.set_yticks([1, 10, 100, 1000], ["1s", "10s", "100s", "1000s"])
+    ax.set_yticks([1, 10, 100], ["1s", "10s", "100s"])
     ax.grid(axis="y", color="#eceef3", zorder=1)
-    title(
+    chart_title(
         ax,
-        "Query time by input path (log scale)",
-        "scale factor 100, 4 CPU / 16 GiB, within the 22-query suite",
+        "Query time by input path",
+        "scale factor 100, 4 CPU / 16 GiB, log scale",
     )
-    legend(ax, list(INPUT_PATH_SECONDS), COLORS)
+    ax.legend(
+        handles=[
+            plt.Rectangle((0, 0), 1, 1, color=color, label=label)
+            for label, color in zip(INPUT_PATH_SECONDS, COLORS)
+        ],
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.1),
+        ncols=3,
+        fontsize=8,
+    )
     path = OUT_DIR / "input-path.png"
     fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
     return path
 
 
-def bytes_chart() -> Path:
-    """Why the cached path is cheap: it reads the dataset once, not per query."""
-    fig, ax = plt.subplots(figsize=(5.2, 2.0))
-    positions = range(len(S3_GB_PER_RUN))
-    ax.barh(positions, list(S3_GB_PER_RUN.values()), height=0.5, color=COLORS[0])
-    for position, gigabytes in enumerate(S3_GB_PER_RUN.values()):
-        ax.text(
-            gigabytes + 8,
-            position,
-            f"{gigabytes:.1f} GB, {gigabytes / 26.5:.1f}x the dataset",
-            va="center",
-            fontsize=8,
+def read_speed_chart() -> Path:
+    """Show the measured whole-dataset read speed for each input path."""
+    fig, ax = plt.subplots(figsize=(6.8, 2.7))
+    positions = list(range(len(READ_SPEED)))
+    height = 0.32
+    for index, placement in enumerate(("pinned", "unpinned")):
+        values = [data[placement] for data in READ_SPEED.values()]
+        bars = ax.barh(
+            [position + (index - 0.5) * height for position in positions],
+            values,
+            height=height,
+            color=COLORS[index],
+            label=placement,
+            zorder=2,
         )
-    ax.set_xlim(0, 500)
-    ax.set_yticks(positions, list(S3_GB_PER_RUN), fontsize=8)
+        for bar, value in zip(bars, values):
+            ax.text(
+                value + 0.025,
+                bar.get_y() + bar.get_height() / 2,
+                f"{value:.2f}",
+                va="center",
+                fontsize=8,
+            )
+    ax.set_yticks(positions, list(READ_SPEED))
     ax.invert_yaxis()
-    ax.set_xticks(
-        [0, 100, 200, 300, 400], ["0", "100 GB", "200 GB", "300 GB", "400 GB"]
-    )
-    title(
+    ax.set_xlim(0, 2.8)
+    ax.set_xlabel("GB/s")
+    ax.grid(axis="x", color="#eceef3", zorder=1)
+    chart_title(
         ax,
-        "Data read out of S3 per 22-query run",
-        "scale factor 100, dataset is 26.5 GB in eight Parquet tables",
+        "Sequential read speed by input path",
+        "whole 26.5 GB dataset, 8 parallel streams, no query engine",
     )
-    path = OUT_DIR / "bytes.png"
+    ax.legend(frameon=False, loc="lower right", fontsize=8)
+    path = OUT_DIR / "read-speed.png"
     fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
     return path
 
 
 def cost_chart() -> Path:
-    fig, ax = plt.subplots(figsize=(5.2, 2.4))
-    labels = list(RUN_COST)
-    positions = range(len(labels))
-    ax.barh(
-        positions,
-        [high for _, high in RUN_COST.values()],
-        height=0.6,
-        color=COLORS[1],
-        zorder=2,
-    )
-    ax.barh(
-        positions,
-        [low for low, _ in RUN_COST.values()],
-        height=0.6,
-        color=COLORS[0],
-        zorder=3,
-    )
-    for position, bounds in enumerate(RUN_COST.values()):
-        amount = " to ".join(
-            f"\\${cost:.2f}" if cost >= 1 else f"\\${cost:.3f}"
-            for cost in sorted(set(bounds))
+    """Show compute and transfer components of each suite cost."""
+    fig, ax = plt.subplots(figsize=(6.6, 3.1))
+    positions = list(range(len(COST_ROWS)))
+    baseline = 0.01
+    for position, (label, compute, transfer) in enumerate(COST_ROWS):
+        ax.barh(
+            position,
+            compute - baseline,
+            left=baseline,
+            height=0.58,
+            color=COLORS[0],
+            label="compute" if position == 0 else None,
+            zorder=3,
         )
-        ax.text(max(bounds) * 1.1, position, amount, va="center", fontsize=8)
+        if transfer is None:
+            ax.barh(
+                position,
+                34.44 - compute,
+                left=compute,
+                height=0.58,
+                color=COLORS[2],
+                hatch="///",
+                edgecolor="#8d929e",
+                label="transfer not measurable" if position == 6 else None,
+                zorder=2,
+            )
+            ax.text(
+                2.0,
+                position,
+                "transfer not measurable",
+                va="center",
+                fontsize=7,
+                color="#525866",
+            )
+            ax.text(34.44 * 1.04, position, "34.44 upper bound (modeled)", va="center")
+        else:
+            if transfer:
+                ax.barh(
+                    position,
+                    transfer,
+                    left=compute,
+                    height=0.58,
+                    color=COLORS[1],
+                    label="S3 transfer" if position == 3 else None,
+                    zorder=2,
+                )
+            total = compute + transfer
+            formatted = f"${total:.3f}" if total < 1 else f"${total:.2f}"
+            ax.text(total * 1.06, position, formatted, va="center", fontsize=8)
     ax.set_xscale("log")
-    ax.set_xlim(0.01, 200)
-    ax.set_yticks(positions, labels)
+    ax.set_xlim(0.01, 45)
+    ax.set_yticks(positions, [row[0] for row in COST_ROWS], fontsize=8)
     ax.invert_yaxis()
-    ax.set_xticks([0.01, 0.1, 1, 10, 100], ["$0.01", "$0.10", "$1", "$10", "$100"])
+    ax.set_xticks([0.01, 0.1, 1, 10], ["$0.01", "$0.10", "$1", "$10"])
     ax.grid(axis="x", color="#eceef3", zorder=1)
-    title(
+    chart_title(
         ax,
-        "Cost per 22-query run (log scale)",
-        "4 CPU / 16 GiB, compute + S3 transfer at \\$0.09/GB, pale bar is modeled",
+        "Cost per 22-query run",
+        "compute + S3 transfer, log scale, transfer upper bound is modeled",
     )
+    ax.legend(frameon=False, loc="lower right", fontsize=7)
     path = OUT_DIR / "cost.png"
     fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
     return path
 
 
 def cumulative_cost_chart() -> Path:
-    """What each input path costs over repeated runs of the same suite."""
-    fig, ax = plt.subplots(figsize=(5.2, 2.8))
-    runs = range(1, 11)
-    volume = [2.41 + 0.015 * (run - 1) for run in runs]
-    direct_s3 = [31.32 * run for run in runs]
-    mount_low = [3.53 * run for run in runs]
-    mount_high = [35.58 * run for run in runs]
-    ax.fill_between(runs, mount_low, mount_high, color=COLORS[2], alpha=0.5, zorder=2)
-    for bound in (mount_low, mount_high):
-        ax.plot(runs, bound, color="#9ea3ad", linewidth=1, linestyle="--", zorder=2)
-    ax.plot(runs, direct_s3, color=COLORS[1], linewidth=2, zorder=3)
-    ax.plot(runs, volume, color=COLORS[0], linewidth=2, zorder=4)
-    for values in (direct_s3, volume):
-        ax.text(10.15, values[-1], f"\\${values[-1]:,.2f}", fontsize=8, va="center")
-    ax.text(6.6, direct_s3[5] + 14, "Direct S3", fontsize=8)
-    ax.text(7.4, volume[6] + 12, "Modal Volume", fontsize=8)
-    ax.text(3.5, 75, "CloudBucketMount,\nmodeled range", fontsize=8)
-    ax.set_xlim(1, 10)
-    ax.set_ylim(0, 380)
-    ax.set_xticks(list(runs))
-    ax.set_yticks([0, 100, 200, 300], ["$0", "$100", "$200", "$300"])
-    ax.set_xlabel("suite runs", fontsize=8)
+    """Compare modeled cost over ten repeated suite runs."""
+    runs = list(range(1, 11))
+    volume = [0.0130 + run * 0.0138 for run in runs]
+    pinned_s3 = [run * 0.390 for run in runs]
+    unpinned_s3 = [run * 31.32 for run in runs]
+
+    fig, ax = plt.subplots(figsize=(6.6, 3.0))
+    lines = (
+        (volume, COLORS[0], "pinned fill, then unpinned Volume"),
+        (pinned_s3, COLORS[1], "pinned s3://"),
+        (unpinned_s3, COLORS[2], "unpinned s3://"),
+    )
+    for values, color, label in lines:
+        ax.plot(runs, values, color=color, linewidth=2, label=label, zorder=3)
+        ax.text(10.15, values[-1], label, color=color, va="center", fontsize=7)
+    ax.set_yscale("log")
+    ax.set_xlim(1, 16)
+    ax.set_ylim(0.01, 500)
+    ax.set_xticks(runs)
+    ax.set_xlabel("suite runs")
+    ax.set_ylabel("cumulative cost")
     ax.grid(axis="y", color="#eceef3", zorder=1)
-    title(
+    ax.text(
+        0.03,
+        0.04,
+        "Volume storage of $2.22/month is not included in the line.",
+        transform=ax.transAxes,
+        fontsize=7,
+        color="#525866",
+    )
+    chart_title(
         ax,
-        "Cost of the same suite, run again and again",
-        "scale factor 100, 4 CPU / 16 GiB, cache filled on the first run",
+        "Cumulative cost over repeated suite runs",
+        "modeled values, log scale",
     )
     path = OUT_DIR / "cumulative-cost.png"
     fig.savefig(path, bbox_inches="tight")
-    return path
-
-
-def queries_chart() -> Path:
-    fig, ax = plt.subplots(figsize=(7.4, 3.0))
-    width = 0.27
-    for index, seconds in enumerate(QUERY_SECONDS.values()):
-        positions = [query + (index - 1) * width for query in range(22)]
-        ax.bar(positions, seconds, width=width, color=COLORS[index], zorder=2)
-    ax.set_xticks(range(22), [f"q{query}" for query in range(1, 23)], fontsize=7)
-    ax.set_yticks([0, 5, 10, 15, 20], ["0", "5s", "10s", "15s", "20s"])
-    ax.grid(axis="y", color="#eceef3", zorder=1)
-    title(
-        ax,
-        "PDS-H query time off the Volume",
-        "scale factor 100, warm cache, totals of 70.7s / 63.9s / 38.6s",
-    )
-    legend(ax, list(QUERY_SECONDS), COLORS)
-    path = OUT_DIR / "queries.png"
-    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
     return path
 
 
 if __name__ == "__main__":
     for chart in (
-        input_path_chart(),
-        bytes_chart(),
+        read_speed_chart(),
         cost_chart(),
+        input_path_chart(),
         cumulative_cost_chart(),
-        queries_chart(),
     ):
         print(chart)

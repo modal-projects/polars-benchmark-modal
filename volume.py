@@ -40,6 +40,8 @@ cache_volume = modal.Volume.from_name(CACHE_VOLUME_NAME, create_if_missing=True)
         DATA_DIR: cache_volume,
         pdsh.BUCKET_DIR: pdsh.bucket_mount(read_only=True),
     },
+    cloud=pdsh.PIN_CLOUD,
+    region=pdsh.PIN_REGION,
 )
 def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
     """Refresh the Volume cache from the bucket, then run selected PDS-H queries."""
@@ -50,6 +52,7 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
     if s3_ingest["files_copied"] or s3_ingest["files_removed"]:
         cache_volume.commit()
 
+    read_throughput = pdsh.read_throughput(CACHE_DIR / f"scale-{scale}")
     run_dir = f"{label}-{time.time_ns()}" if label else str(time.time_ns())
     timings_dir = DATA_DIR / "results" / f"scale-{scale}" / run_dir
     return {
@@ -57,6 +60,8 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
             timings_dir, scale, queries, {"PATH_TABLES": str(CACHE_DIR)}
         ),
         "s3_ingest": s3_ingest,
+        "read_throughput": read_throughput,
+        "region": os.environ.get("MODAL_REGION"),
     }
 
 

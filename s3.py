@@ -22,6 +22,7 @@ and ``POLARS_BENCHMARK_REPO`` to ``./polars-benchmark``.
 import json
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,59 @@ def query_env() -> dict[str, str]:
     }
 
 
+def s3_read_throughput(scale: float, credentials: dict[str, str]) -> dict[str, Any]:
+    """Stream the flat-layout Parquet objects out of S3 and report GB/s."""
+    client_args = {"region_name": pdsh.S3_REGION}
+    if "AWS_ACCESS_KEY_ID" in credentials:
+        client_args.update(
+            aws_access_key_id=credentials["AWS_ACCESS_KEY_ID"],
+            aws_secret_access_key=credentials["AWS_SECRET_ACCESS_KEY"],
+            aws_session_token=credentials["AWS_SESSION_TOKEN"],
+        )
+    client = boto3.client("s3", **client_args)
+    prefix = f"{pdsh.S3_PREFIX}/scale-{scale}/"
+    segments = []
+    for page in client.get_paginator("list_objects_v2").paginate(
+        Bucket=pdsh.S3_BUCKET, Prefix=prefix
+    ):
+        for item in page.get("Contents", []):
+            key = item["Key"]
+            if not key.endswith(".parquet"):
+                continue
+            size = item["Size"]
+            step = -(-size // pdsh.READ_CONCURRENCY)
+            segments += [
+                (key, offset, min(step, size - offset))
+                for offset in range(0, size, step)
+            ]
+
+    def read_segment(segment: tuple[str, int, int]) -> int:
+        key, offset, length = segment
+        body = client.get_object(
+            Bucket=pdsh.S3_BUCKET,
+            Key=key,
+            Range=f"bytes={offset}-{offset + length - 1}",
+        )["Body"]
+        read = 0
+        while read < length and (
+            chunk := body.read(min(pdsh.CHUNK_SIZE, length - read))
+        ):
+            read += len(chunk)
+        body.close()
+        return read
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(pdsh.READ_CONCURRENCY) as pool:
+        total = sum(pool.map(read_segment, segments))
+    seconds = time.perf_counter() - started
+    return {
+        "bytes": total,
+        "seconds": seconds,
+        "gb_per_second": total / 1e9 / seconds,
+        "streams": pdsh.READ_CONCURRENCY,
+    }
+
+
 def received_bytes() -> int:
     """Bytes received on the container's non-loopback interfaces."""
     lines = Path("/proc/net/dev").read_text().splitlines()[2:]
@@ -78,11 +132,11 @@ def received_bytes() -> int:
 @app.function(
     image=image,
     env={**pdsh.FUNCTION_ENV, "RESULTS_VOLUME_NAME": RESULTS_VOLUME_NAME},
-    secrets=[]
-    if pdsh.S3_ROLE_ARN
-    else [modal.Secret.from_name("aws-secret")],
+    secrets=[] if pdsh.S3_ROLE_ARN else [modal.Secret.from_name("aws-secret")],
     timeout=24 * 3600,
     volumes={RESULTS_DIR: results_volume},
+    cloud=pdsh.PIN_CLOUD,
+    region=pdsh.PIN_REGION,
 )
 def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
     """Run selected PDS-H queries against the bucket, one process per query."""
@@ -92,9 +146,11 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
 
     before = received_bytes()
     started = time.perf_counter()
+    credentials = query_env()
+    read_throughput = s3_read_throughput(scale, credentials)
     runs = [
         pdsh.run_queries(
-            timings_dir / f"q{selector}", scale, str(selector), query_env()
+            timings_dir / f"q{selector}", scale, str(selector), credentials
         )
         for selector in selectors
     ]
@@ -112,6 +168,7 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
         "exit_code": max(run["exit_code"] for run in runs),
         "log": str(timings_dir),
         "region": os.environ.get("MODAL_REGION"),
+        "read_throughput": read_throughput,
     }
 
 

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,8 @@ if not S3_BUCKET:
 S3_PREFIX = os.environ.get("S3_PREFIX", "pdsh")
 S3_REGION = os.environ.get("S3_REGION", "us-east-1")
 S3_ROLE_ARN = os.environ.get("S3_ROLE_ARN")
+PIN_CLOUD = os.environ.get("PIN_CLOUD") or None
+PIN_REGION = os.environ.get("PIN_REGION") or None
 
 TABLES = (
     "customer",
@@ -40,6 +43,8 @@ TABLES = (
 )
 QUERY_COUNT = 22
 MANIFEST_NAME = "source-manifest.json"
+CHUNK_SIZE = 8 << 20
+READ_CONCURRENCY = 8
 CONFIGS = ((4, 16 * 1024), (8, 32 * 1024), (32, 128 * 1024))
 
 # Upstream's "network" io_type reads
@@ -64,6 +69,10 @@ FUNCTION_ENV = {
 }
 if S3_ROLE_ARN:
     FUNCTION_ENV["S3_ROLE_ARN"] = S3_ROLE_ARN
+if PIN_CLOUD:
+    FUNCTION_ENV["PIN_CLOUD"] = PIN_CLOUD
+if PIN_REGION:
+    FUNCTION_ENV["PIN_REGION"] = PIN_REGION
 
 _base_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -158,6 +167,39 @@ def sync_tables(source: Path, destination: Path) -> dict[str, Any]:
         "seconds": seconds,
         "gb_per_second": transferred / 1e9 / seconds if transferred else None,
         "region": os.environ.get("MODAL_REGION"),
+    }
+
+
+def read_throughput(root: Path) -> dict[str, Any]:
+    """Read every Parquet file under ``root`` with parallel streams and report GB/s."""
+    segments = []
+    for path in sorted(root.rglob("*.parquet")):
+        size = path.stat().st_size
+        step = -(-size // READ_CONCURRENCY)
+        segments += [
+            (path, offset, min(step, size - offset)) for offset in range(0, size, step)
+        ]
+
+    def read_segment(segment: tuple[Path, int, int]) -> int:
+        path, offset, length = segment
+        read = 0
+        with path.open("rb", buffering=0) as file:
+            file.seek(offset)
+            while read < length and (
+                chunk := file.read(min(CHUNK_SIZE, length - read))
+            ):
+                read += len(chunk)
+        return read
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(READ_CONCURRENCY) as pool:
+        total = sum(pool.map(read_segment, segments))
+    seconds = time.perf_counter() - started
+    return {
+        "bytes": total,
+        "seconds": seconds,
+        "gb_per_second": total / 1e9 / seconds,
+        "streams": READ_CONCURRENCY,
     }
 
 
