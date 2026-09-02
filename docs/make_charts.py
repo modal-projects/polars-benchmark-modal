@@ -46,7 +46,7 @@ COST_ROWS = (
     ("Volume warm, pinned", 0.049, 0.0),
     ("Volume first fill, pinned", 0.062, 0.0),
     ("Volume first fill, unpinned", 0.036, 2.39),
-    ("s3://, pinned", 0.390, 0.0),
+    ("s3://, pinned", 0.301, 0.0),
     ("s3://, unpinned", 0.305, 31.01),
     ("CloudBucketMount, unpinned", 1.14, None),
 )
@@ -66,15 +66,15 @@ INPUT_PATH_SECONDS = {
         19: 3.43, 20: 6.00, 21: 34.16, 22: 2.53,
     },
     "s3:// pinned": {
-        1: 36.00, 2: 5.59, 3: 79.37, 4: 37.61, 5: 63.22, 6: 36.55,
-        7: 69.38, 8: 66.10, 9: 71.43, 10: 68.33, 11: 4.05, 12: 38.34,
-        13: 25.42, 14: 57.64, 15: 45.62, 16: 4.02, 17: 45.29, 18: 53.49,
-        19: 65.02, 20: 61.08, 21: 122.95, 22: 6.56,
+        1: 37.59, 2: 6.18, 3: 88.69, 4: 35.86, 5: 51.77, 6: 30.36,
+        7: 57.34, 8: 55.73, 9: 60.45, 10: 57.47, 11: 3.53, 12: 32.35,
+        13: 21.56, 14: 46.48, 15: 39.94, 16: 3.30, 17: 41.34, 18: 51.07,
+        19: 62.48, 20: 54.37, 21: 122.44, 22: 6.45,
     },
 }
 # fmt: on
 
-EXPECTED_GEOMEANS = (2.28, 4.23, 35.12)
+EXPECTED_GEOMEANS = (2.28, 4.23, 31.76)
 
 
 def chart_title(ax, heading: str, subheading: str) -> None:
@@ -206,7 +206,7 @@ def cost_chart() -> Path:
                 else None,
                 zorder=2,
             )
-            ax.text(34.44 * 1.04, position, "34.44 upper bound (modeled)", va="center")
+            ax.text(34.44 * 1.04, position, "$34.44 upper bound (modeled)", va="center")
         else:
             if transfer:
                 ax.barh(
@@ -249,7 +249,7 @@ def cumulative_cost_chart() -> Path:
     """Compare modeled cost over ten repeated suite runs."""
     runs = list(range(1, 11))
     volume = [0.0130 + run * 0.0138 for run in runs]
-    pinned_s3 = [run * 0.390 for run in runs]
+    pinned_s3 = [run * 0.301 for run in runs]
     unpinned_s3 = [run * 31.32 for run in runs]
 
     fig, ax = plt.subplots(figsize=(6.6, 3.0))

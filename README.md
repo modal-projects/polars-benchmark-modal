@@ -59,7 +59,7 @@ The 22-query suite, with what it cost:
 | Volume, warm, pinned | 321s | 0 | $0.049 | $0 | **$0.049** |
 | Volume, first fill, pinned | 84s + 315s | 26.5 GB | $0.062 | $0 | **$0.062** |
 | Volume, first fill, unpinned | 253s + 157s | 26.5 GB | $0.036 | $2.39 | **$2.43** |
-| `s3://`, pinned | 2535s | 378.8 GB | $0.390 | $0 | **$0.390** |
+| `s3://`, pinned | 1956s | 351.3 GB | $0.301 | $0 | **$0.301** |
 | `s3://`, unpinned | 3467s | 344.6 GB | $0.305 | $31.01 | **$31.32** |
 | `CloudBucketMount`, unpinned | 12951s | not measurable | $1.14 | modeled | - |
 
@@ -67,8 +67,8 @@ The 22-query suite, with what it cost:
 
 Two separate effects are visible there. Placement decides the transfer column:
 $31.01 becomes $0 for the same 22 queries. The input path decides the time
-column: 2535s reading `s3://` in-region against 157s off a warm Volume, a
-geometric mean of 35.12s against 2.28s per query.
+column: 1956s reading `s3://` in-region against 157s off a warm Volume, a
+geometric mean of 31.76s against 2.28s per query.
 
 ![Query time by input path](docs/input-path.png)
 
@@ -80,7 +80,7 @@ transfer happens at all:
 | SF100, 10 suite runs a month | cost |
 |---|---:|
 | pinned fill once, then unpinned Volume runs | **$0.15** plus $2.22 storage |
-| pinned `s3://`, no cache | **$3.90** |
+| pinned `s3://`, no cache | **$3.01** |
 | unpinned `s3://`, no cache | **$313.20** |
 
 ![Cost of repeated runs](docs/cumulative-cost.png)
@@ -128,9 +128,9 @@ transfer and `c` per second of compute:
   plus storage
 
 Pinning sets `e` to zero and raises `c`. Reuse is what pays for the fill and the
-storage. At SF100 above, the fill costs $0.06 and each suite saves $0.376
+storage. At SF100 above, the fill costs $0.06 and each suite saves $0.287
 against pinned `s3://`, so the copy pays for itself on the first run and the
-$2.22 of monthly storage pays for itself after about six.
+$2.22 of monthly storage pays for itself after about eight.
 
 Cache poorly when each object is read once. A job over the last few minutes of
 trading data, or yesterday's prices, reads a window that was never in the cache
