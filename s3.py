@@ -144,10 +144,10 @@ def read(scale: float, queries: str = "", label: str = "") -> dict[str, Any]:
     run_dir = f"{label}-{time.time_ns()}" if label else str(time.time_ns())
     timings_dir = RESULTS_DIR / f"scale-{scale}" / run_dir
 
-    before = received_bytes()
-    started = time.perf_counter()
     credentials = query_env()
     read_throughput = s3_read_throughput(scale, credentials)
+    before = received_bytes()
+    started = time.perf_counter()
     runs = [
         pdsh.run_queries(
             timings_dir / f"q{selector}", scale, str(selector), credentials
