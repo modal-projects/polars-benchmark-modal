@@ -1,4 +1,4 @@
-"""Render the five charts used in README.md.
+"""Render the six charts used in README.md.
 
 ``python docs/make_charts.py`` writes only the PNG files in ``docs/``. The
 measurements are kept in this module so chart regeneration needs no network or
@@ -83,6 +83,85 @@ INPUT_PATH_SECONDS = {
 
 EXPECTED_GEOMEANS = (2.28, 4.23, 31.76)
 
+PLACEMENT_QUERY_SECONDS = {
+    "none -> southcentralus/europe-west1": INPUT_PATH_SECONDS["Volume warm unpinned"],
+    "us -> us-east-1": {
+        1: 4.705,
+        2: 0.460,
+        3: 10.517,
+        4: 5.391,
+        5: 4.088,
+        6: 1.450,
+        7: 9.546,
+        8: 4.815,
+        9: 11.843,
+        10: 4.564,
+        11: 1.026,
+        12: 2.701,
+        13: 6.714,
+        14: 2.922,
+        15: 2.314,
+        16: 1.358,
+        17: 2.490,
+        18: 7.973,
+        19: 3.429,
+        20: 6.079,
+        21: 33.451,
+        22: 2.576,
+    },
+    "us-east -> us-east-2": {
+        1: 4.487,
+        2: 0.459,
+        3: 9.350,
+        4: 6.162,
+        5: 4.074,
+        6: 1.361,
+        7: 9.842,
+        8: 4.850,
+        9: 11.213,
+        10: 5.320,
+        11: 1.143,
+        12: 2.455,
+        13: 7.335,
+        14: 2.073,
+        15: 1.982,
+        16: 1.188,
+        17: 2.610,
+        18: 8.903,
+        19: 3.215,
+        20: 6.364,
+        21: 30.083,
+        22: 2.488,
+    },
+    "us-east-1 -> us-east-1": {
+        1: 5.290,
+        2: 0.613,
+        3: 13.408,
+        4: 6.541,
+        5: 4.607,
+        6: 1.703,
+        7: 9.688,
+        8: 5.342,
+        9: 11.950,
+        10: 4.915,
+        11: 1.163,
+        12: 2.749,
+        13: 8.279,
+        14: 2.249,
+        15: 2.381,
+        16: 1.306,
+        17: 2.607,
+        18: 10.270,
+        19: 3.428,
+        20: 6.005,
+        21: 34.157,
+        22: 2.525,
+    },
+}
+
+EXPECTED_PLACEMENT_QUERY_GEOMEANS = (2.28, 3.92, 3.83, 4.23)
+PLACEMENT_QUERY_COLORS = (COLORS[0], "#6f78df", COLORS[1], COLORS[2])
+
 
 def chart_title(ax, heading: str, subheading: str) -> None:
     ax.set_title(heading, loc="left", fontsize=10, pad=24)
@@ -139,6 +218,56 @@ def input_path_chart() -> Path:
         fontsize=8,
     )
     path = OUT_DIR / "input-path.png"
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
+def placement_queries_chart() -> Path:
+    """Compare each query across warm Volume placement selectors."""
+    geomeans = []
+    for index, seconds in enumerate(PLACEMENT_QUERY_SECONDS.values()):
+        geomean = math.exp(sum(math.log(value) for value in seconds.values()) / 22)
+        assert round(geomean, 2) == EXPECTED_PLACEMENT_QUERY_GEOMEANS[index]
+        geomeans.append(geomean)
+
+    fig, ax = plt.subplots(figsize=(7.4, 3.5))
+    width = 0.18
+    slots = [*range(22), 23]
+    for index, (label, seconds) in enumerate(PLACEMENT_QUERY_SECONDS.items()):
+        values = [seconds[query] for query in range(1, 23)] + [geomeans[index]]
+        positions = [slot + (index - 1.5) * width for slot in slots]
+        ax.bar(
+            positions,
+            values,
+            width=width,
+            color=PLACEMENT_QUERY_COLORS[index],
+            label=label,
+            zorder=2,
+        )
+    ax.axvline(22, color="#d5d8e0", linewidth=1, zorder=1)
+    ax.set_yscale("log")
+    ax.set_ylim(0.2, 100)
+    ax.set_xticks(
+        slots,
+        [f"q{query}" for query in range(1, 23)] + ["geomean"],
+        fontsize=7,
+    )
+    ax.set_yticks([1, 10, 100], ["1s", "10s", "100s"])
+    ax.grid(axis="y", color="#eceef3", zorder=1)
+    chart_title(
+        ax,
+        "Warm Volume query time by placement",
+        "scale factor 100, 4 CPU / 16 GiB, log scale",
+    )
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.13),
+        ncols=2,
+        fontsize=7,
+    )
+    path = OUT_DIR / "placement-queries.png"
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -357,6 +486,7 @@ if __name__ == "__main__":
     for chart in (
         read_speed_chart(),
         placement_chart(),
+        placement_queries_chart(),
         cost_chart(),
         input_path_chart(),
         cumulative_cost_chart(),

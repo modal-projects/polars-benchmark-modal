@@ -88,6 +88,12 @@ so the durable cold-run difference is the compute multiplier. The unpinned cold
 fill includes modeled off-region transfer. Cold-fill read speed is omitted
 because the probe measured the container's page cache.
 
+![Warm Volume query time by placement](docs/placement-queries.png)
+
+All four placements track each other closely, within roughly 10% to 25% per
+query, with no reordering of expensive queries. Placement changes the price of
+the run rather than its performance profile, and q21 dominates every placement.
+
 The 22-query suite, with what it cost:
 
 | per 22-query run | time | S3 read | compute | transfer | total |
