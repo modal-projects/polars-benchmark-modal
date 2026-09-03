@@ -25,10 +25,10 @@ pays no transfer charge. A container in a different region pays inter-region
 rates, and a container on another cloud pays the bucket's internet egress rate.
 Unpinned containers land wherever there is capacity, so both cases are ordinary.
 
-Pinning with `region=` therefore removes the transfer bill, at
-[1.5x or 1.75x](https://modal.com/docs/guide/region-selection#pricing) the
-compute price. That leaves read speed as the thing an input path actually
-changes, so the benchmark measures both.
+Placement is a knob with a compute multiplier. Broad selectors currently cost
+1.5x and exact region selectors 1.75x, but only the landed region decides
+whether a bucket read is in-region and free of transfer charges. Read speed is
+the thing an input path actually changes, so the benchmark measures both.
 
 ## Results
 
@@ -50,6 +50,27 @@ involved:
 
 The Volume is roughly 10x the mount and 4x Polars' own S3 reader, and it is the
 one path whose speed does not depend on where the container landed.
+
+### Placement comparison
+
+![Warm Volume suite by placement](docs/placement.png)
+
+| input path | requested region | landed region | compute multiplier | suite wall | per-query geomean | read GB/s | cost |
+|---|---|---|---:|---:|---:|---:|---:|
+| Volume, warm | none | southcentralus | 1.0x | 157s | 2.28s | 2.42 | $0.014 |
+| Volume, warm | `us` | us-east-1 | 1.5x | 291s | 3.92s | 2.87 | $0.038 |
+| Volume, warm | `us-east` | us-east-2 | 1.5x | 278s | 3.83s | 2.55 | $0.037 |
+| Volume, warm | `us-east-1` | us-east-1 | 1.75x | 321s | 4.23s | 2.37 | $0.049 |
+| `s3://` | `us-east` | us-east-1 | 1.5x | 1933s | 31.02s | 0.208 | $0.255 |
+| `s3://` | `us-east-1` | us-east-1 | 1.75x | 1956s | 31.76s | 0.197 | $0.301 |
+
+The broad selector reached the bucket's region for `s3://` at 1.5x, versus
+1.75x for the exact selector, and took 1933s versus 1956s. That difference is
+within the observed run-to-run spread, so it is not evidence that broad is
+faster. Broad selectors are not a guarantee: `us-east` landed in `us-east-2`
+for Volume, which is inter-region traffic against this `us-east-1` bucket and
+can incur transfer charges. The landed region, not the requested selector,
+decides whether the read is free.
 
 The 22-query suite, with what it cost:
 

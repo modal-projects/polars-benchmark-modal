@@ -1,4 +1,4 @@
-"""Render the four charts used in README.md.
+"""Render the five charts used in README.md.
 
 ``python docs/make_charts.py`` writes only the PNG files in ``docs/``. The
 measurements are kept in this module so chart regeneration needs no network or
@@ -49,6 +49,13 @@ COST_ROWS = (
     ("s3://, pinned", 0.301, 0.0),
     ("s3://, unpinned", 0.305, 31.01),
     ("CloudBucketMount, unpinned", 1.14, None),
+)
+
+PLACEMENT_ROWS = (
+    ("none", "southcentralus", 157, 0.014, COLORS[0]),
+    ("us", "us-east-1", 291, 0.038, COLORS[1]),
+    ("us-east", "us-east-2", 278, 0.037, COLORS[1]),
+    ("us-east-1", "us-east-1", 321, 0.049, COLORS[2]),
 )
 
 # fmt: off
@@ -177,6 +184,45 @@ def read_speed_chart() -> Path:
     return path
 
 
+def placement_chart() -> Path:
+    """Compare warm Volume suite wall time across placement selectors."""
+    fig, ax = plt.subplots(figsize=(6.8, 2.8))
+    positions = list(range(len(PLACEMENT_ROWS)))
+    bars = ax.barh(
+        positions,
+        [row[2] for row in PLACEMENT_ROWS],
+        height=0.58,
+        color=[row[4] for row in PLACEMENT_ROWS],
+        zorder=2,
+    )
+    for bar, (_, _, wall, cost, _) in zip(bars, PLACEMENT_ROWS):
+        ax.text(
+            wall + 6,
+            bar.get_y() + bar.get_height() / 2,
+            f"${cost:.3f}",
+            va="center",
+            fontsize=8,
+        )
+    ax.set_yticks(
+        positions,
+        [f"{requested} -> {landed}" for requested, landed, _, _, _ in PLACEMENT_ROWS],
+        fontsize=8,
+    )
+    ax.invert_yaxis()
+    ax.set_xlim(0, 390)
+    ax.set_xlabel("wall seconds")
+    ax.grid(axis="x", color="#eceef3", zorder=1)
+    chart_title(
+        ax,
+        "Warm Volume suite by placement",
+        "scale factor 100, 4 CPU / 16 GiB, landed region shown, cost labelled",
+    )
+    path = OUT_DIR / "placement.png"
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 def cost_chart() -> Path:
     """Show compute and transfer components of each suite cost."""
     fig, ax = plt.subplots(figsize=(6.6, 3.1))
@@ -294,6 +340,7 @@ def cumulative_cost_chart() -> Path:
 if __name__ == "__main__":
     for chart in (
         read_speed_chart(),
+        placement_chart(),
         cost_chart(),
         input_path_chart(),
         cumulative_cost_chart(),
