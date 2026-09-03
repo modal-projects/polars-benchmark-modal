@@ -52,10 +52,10 @@ COST_ROWS = (
 )
 
 PLACEMENT_ROWS = (
-    ("none", "southcentralus", 157, 0.014, 206, 2.41),
-    ("us", "us-east-1", 291, 0.038, 323, 0.043),
-    ("us-east", "us-east-2", 278, 0.037, 276, 0.036),
-    ("us-east-1", "us-east-1", 321, 0.049, 315, 0.049),
+    ("none", "southcentralus", "southcentralus", 157, 0.014, 206, 2.41),
+    ("us", "us-east-1", "us-east-1", 291, 0.038, 323, 0.043),
+    ("us-east", "us-east-2", "us-east-1", 278, 0.037, 276, 0.036),
+    ("us-east-1", "us-east-1", "us-east-1", 321, 0.049, 315, 0.049),
 )
 
 # fmt: off
@@ -189,32 +189,32 @@ def placement_chart() -> Path:
     fig, ax = plt.subplots(figsize=(6.8, 3.1))
     positions = list(range(len(PLACEMENT_ROWS)))
     width = 0.32
-    for offset, index, color, label in (
-        (-width / 2, 2, COLORS[0], "warm"),
-        (width / 2, 4, COLORS[1], "cold"),
+    for offset, wall_index, cost_index, landed_index, color, label in (
+        (-width / 2, 3, 4, 1, COLORS[0], "warm"),
+        (width / 2, 5, 6, 2, COLORS[1], "cold"),
     ):
         bars = ax.barh(
             [position + offset for position in positions],
-            [row[index] for row in PLACEMENT_ROWS],
+            [row[wall_index] for row in PLACEMENT_ROWS],
             height=width,
             color=color,
             label=label,
             zorder=2,
         )
-        cost_index = index + 1
         for bar, row in zip(bars, PLACEMENT_ROWS):
+            cost = row[cost_index]
             ax.text(
-                row[cost_index] + 6,
+                row[wall_index] + 6,
                 bar.get_y() + bar.get_height() / 2,
-                f"${row[cost_index]:.3f}"
-                if row[cost_index] < 1
-                else f"${row[cost_index]:.2f}",
+                f"{row[landed_index]} ${cost:.3f}"
+                if cost < 1
+                else f"{row[landed_index]} ${cost:.2f}",
                 va="center",
                 fontsize=8,
             )
     ax.set_yticks(
         positions,
-        [f"{requested} -> {landed}" for requested, landed, *_ in PLACEMENT_ROWS],
+        [requested for requested, *_ in PLACEMENT_ROWS],
         fontsize=8,
     )
     ax.invert_yaxis()
@@ -224,7 +224,7 @@ def placement_chart() -> Path:
     chart_title(
         ax,
         "Warm and cold Volume suite by placement",
-        "scale factor 100, 4 CPU / 16 GiB, landed region shown, cost labelled",
+        "scale factor 100, 4 CPU / 16 GiB, landed region and cost labelled",
     )
     ax.legend(
         frameon=False,

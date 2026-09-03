@@ -68,9 +68,10 @@ The broad selector reached the bucket's region for `s3://` at 1.5x, versus
 1.75x for the exact selector, and took 1933s versus 1956s. That difference is
 within the observed run-to-run spread, so it is not evidence that broad is
 faster. Broad selectors are not a guarantee: `us-east` landed in `us-east-2`
-for Volume, which is inter-region traffic against this `us-east-1` bucket and
-can incur transfer charges. The landed region, not the requested selector,
-decides whether the read is free.
+for the warm Volume run and in `us-east-1` for the cold fill. The former is
+inter-region traffic against this `us-east-1` bucket and can incur transfer
+charges. The landed region, not the requested selector, decides whether the
+read is free.
 
 Cold Volume fills add one 26.5 GB ingest:
 
