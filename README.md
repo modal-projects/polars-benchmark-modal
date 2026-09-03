@@ -53,7 +53,7 @@ one path whose speed does not depend on where the container landed.
 
 ### Placement comparison
 
-![Warm Volume suite by placement](docs/placement.png)
+![Warm and cold Volume suite by placement](docs/placement.png)
 
 | input path | requested region | landed region | compute multiplier | suite wall | per-query geomean | read GB/s | cost |
 |---|---|---|---:|---:|---:|---:|---:|
@@ -71,6 +71,21 @@ faster. Broad selectors are not a guarantee: `us-east` landed in `us-east-2`
 for Volume, which is inter-region traffic against this `us-east-1` bucket and
 can incur transfer charges. The landed region, not the requested selector,
 decides whether the read is free.
+
+Cold Volume fills add one 26.5 GB ingest:
+
+| requested region | landed region | compute multiplier | suite wall | ingest | per-query geomean | cost |
+|---|---|---:|---:|---:|---:|---:|
+| none | southcentralus | 1.0x | 206s | not reported | not reported | $2.41 total |
+| `us` | us-east-1 | 1.5x | 323s | 82.8s at 0.320 GB/s | 4.14s | $0.043 |
+| `us-east` | us-east-1 | 1.5x | 276s | 83.0s at 0.319 GB/s | 3.90s | $0.036 |
+| `us-east-1` | us-east-1 | 1.75x | 315s | 84.5s at 0.314 GB/s | 4.31s | $0.049 |
+
+In-region ingest ran at essentially the same speed across broad and exact
+selectors. The 276s to 323s cold-suite range is within the run-to-run spread,
+so the durable cold-run difference is the compute multiplier. The unpinned cold
+fill includes modeled off-region transfer. Cold-fill read speed is omitted
+because the probe measured the container's page cache.
 
 The 22-query suite, with what it cost:
 

@@ -52,10 +52,10 @@ COST_ROWS = (
 )
 
 PLACEMENT_ROWS = (
-    ("none", "southcentralus", 157, 0.014, COLORS[0]),
-    ("us", "us-east-1", 291, 0.038, COLORS[1]),
-    ("us-east", "us-east-2", 278, 0.037, COLORS[1]),
-    ("us-east-1", "us-east-1", 321, 0.049, COLORS[2]),
+    ("none", "southcentralus", 157, 0.014, 206, 2.41),
+    ("us", "us-east-1", 291, 0.038, 323, 0.043),
+    ("us-east", "us-east-2", 278, 0.037, 276, 0.036),
+    ("us-east-1", "us-east-1", 321, 0.049, 315, 0.049),
 )
 
 # fmt: off
@@ -185,27 +185,36 @@ def read_speed_chart() -> Path:
 
 
 def placement_chart() -> Path:
-    """Compare warm Volume suite wall time across placement selectors."""
-    fig, ax = plt.subplots(figsize=(6.8, 2.8))
+    """Compare warm and cold Volume suite wall time across selectors."""
+    fig, ax = plt.subplots(figsize=(6.8, 3.1))
     positions = list(range(len(PLACEMENT_ROWS)))
-    bars = ax.barh(
-        positions,
-        [row[2] for row in PLACEMENT_ROWS],
-        height=0.58,
-        color=[row[4] for row in PLACEMENT_ROWS],
-        zorder=2,
-    )
-    for bar, (_, _, wall, cost, _) in zip(bars, PLACEMENT_ROWS):
-        ax.text(
-            wall + 6,
-            bar.get_y() + bar.get_height() / 2,
-            f"${cost:.3f}",
-            va="center",
-            fontsize=8,
+    width = 0.32
+    for offset, index, color, label in (
+        (-width / 2, 2, COLORS[0], "warm"),
+        (width / 2, 4, COLORS[1], "cold"),
+    ):
+        bars = ax.barh(
+            [position + offset for position in positions],
+            [row[index] for row in PLACEMENT_ROWS],
+            height=width,
+            color=color,
+            label=label,
+            zorder=2,
         )
+        cost_index = index + 1
+        for bar, row in zip(bars, PLACEMENT_ROWS):
+            ax.text(
+                row[cost_index] + 6,
+                bar.get_y() + bar.get_height() / 2,
+                f"${row[cost_index]:.3f}"
+                if row[cost_index] < 1
+                else f"${row[cost_index]:.2f}",
+                va="center",
+                fontsize=8,
+            )
     ax.set_yticks(
         positions,
-        [f"{requested} -> {landed}" for requested, landed, _, _, _ in PLACEMENT_ROWS],
+        [f"{requested} -> {landed}" for requested, landed, *_ in PLACEMENT_ROWS],
         fontsize=8,
     )
     ax.invert_yaxis()
@@ -214,8 +223,15 @@ def placement_chart() -> Path:
     ax.grid(axis="x", color="#eceef3", zorder=1)
     chart_title(
         ax,
-        "Warm Volume suite by placement",
+        "Warm and cold Volume suite by placement",
         "scale factor 100, 4 CPU / 16 GiB, landed region shown, cost labelled",
+    )
+    ax.legend(
+        frameon=False,
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.16),
+        ncols=2,
+        fontsize=8,
     )
     path = OUT_DIR / "placement.png"
     fig.savefig(path, bbox_inches="tight")
