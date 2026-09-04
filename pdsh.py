@@ -129,7 +129,14 @@ def copy_tables(source: Path, destination: Path) -> int:
     return transferred
 
 
-def sync_tables(source: Path, destination: Path) -> dict[str, Any]:
+def table_of(relative_path: str) -> str:
+    """The table a cached file belongs to, for both flat and per-table layouts."""
+    return Path(relative_path).parts[0].removesuffix(".parquet")
+
+
+def sync_tables(
+    source: Path, destination: Path, tables: tuple[str, ...] = TABLES
+) -> dict[str, Any]:
     """Mirror the bucket's Parquet files into the cache, copying only changes.
 
     ``MANIFEST_NAME`` beside the cached files records the size and last-modified
@@ -138,26 +145,38 @@ def sync_tables(source: Path, destination: Path) -> dict[str, Any]:
     changed object is copied whole and the unit of re-fetch is one file: a table
     written as several Parquet files costs only the files that changed, while a
     table written as one file costs the whole table.
+
+    Only ``tables`` are considered, so a caller can cache part of a dataset and
+    leave the rest on the bucket; the manifest keeps the entries of the tables it
+    was not asked about.
     """
     destination.mkdir(parents=True, exist_ok=True)
     manifest_path = destination / MANIFEST_NAME
     cached = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    tracked = {name: key for name, key in cached.items() if table_of(name) in tables}
 
     current = {}
     for path in sorted(source.rglob("*.parquet")):
-        stat = path.stat()
-        current[str(path.relative_to(source))] = [stat.st_size, stat.st_mtime]
+        name = str(path.relative_to(source))
+        if table_of(name) in tables:
+            stat = path.stat()
+            current[name] = [stat.st_size, stat.st_mtime]
 
     started = time.perf_counter()
-    copied = [name for name, key in current.items() if cached.get(name) != key]
+    copied = [
+        name
+        for name, key in current.items()
+        if tracked.get(name) != key or not (destination / name).exists()
+    ]
     for name in copied:
         (destination / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / name, destination / name)
-    removed = sorted(cached.keys() - current.keys())
+    removed = sorted(tracked.keys() - current.keys())
     for name in removed:
         (destination / name).unlink(missing_ok=True)
     seconds = time.perf_counter() - started
-    manifest_path.write_text(json.dumps(current, sort_keys=True))
+    manifest = {name: key for name, key in cached.items() if name not in tracked}
+    manifest_path.write_text(json.dumps({**manifest, **current}, sort_keys=True))
 
     transferred = sum(current[name][0] for name in copied)
     return {

@@ -12,6 +12,7 @@ container reading it runs. The same upstream benchmark is wired three ways.
 | [`volume.py`](volume.py) | a Modal Volume, refreshed from the bucket, then read locally |
 | [`cbm.py`](cbm.py) | a `CloudBucketMount` over the bucket, on every read |
 | [`s3.py`](s3.py) | `s3://` straight from Polars, on every read |
+| [`mixed.py`](mixed.py) | static tables from a Volume, one fresh table from the bucket |
 
 [`pdsh.py`](pdsh.py) holds the shared image, Polars settings and query runner;
 [`prepare_data.py`](prepare_data.py) generates the dataset if you lack one.
@@ -180,10 +181,23 @@ trading data, or yesterday's prices, reads a window that was never in the cache
 and will not be queried again, so a copy just adds a hop. Time-partitioning does
 not change that: the newest partition is always cold.
 
-Mixed workloads split. Static dimension tables are read by every query and cache
-well; the newest window streams from the bucket. `volume.py` mirrors whatever is
-under the prefix you point it at, so cache one prefix and read the other
-directly.
+Mixed workloads split, and this is where the once-only case is worth measuring
+rather than assuming. [`mixed.py`](mixed.py) caches the static tables and treats
+`lineitem`, 18 GB of the 26.5 GB, as a batch that has never been read: q3 joins
+two cached tables against it, 4 CPU / 16 GiB.
+
+| fresh table, static tables on a Volume | requested region | fresh transfer | q3 |
+|---|---|---:|---:|
+| staged into the Volume, then queried | `us-east-1` | 41s for 18 GB | 9.5s |
+| read from the mount on every scan | `us-east-1` | none up front | 687s |
+| staged into the Volume, then queried | none | 82s for 18 GB | 9.6s |
+| read from the mount on every scan | none | none up front | 206s |
+
+Staging data that is read once still won, by more than the copy cost, in region
+and out of it. A query does not read an object once: it goes back to it, and each
+round trip pays the mount's request latency, while the copy pays it once and the
+query then runs at Volume speed. The mount rows are the erratic path noted above,
+so read them as hundreds of seconds rather than as exact figures.
 
 ## Keeping the cache fresh
 
@@ -246,6 +260,9 @@ modal run volume.py
 modal run volume.py --queries 1,6
 modal run cbm.py --queries 1
 modal run s3.py --queries 1
+
+# Static tables cached, one fresh table read from the bucket on every scan.
+modal run mixed.py --queries 3 --mode direct
 ```
 
 Every run prints JSON per resource configuration: wall time, per-query seconds
