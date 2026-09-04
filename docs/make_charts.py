@@ -1,4 +1,4 @@
-"""Render the six charts used in README.md.
+"""Render the three charts used in README.md.
 
 ``python docs/make_charts.py`` writes only the PNG files in ``docs/``. The
 measurements are kept in this module so chart regeneration needs no network or
@@ -51,13 +51,6 @@ COST_ROWS = (
     ("CloudBucketMount, unpinned", 1.14, None),
 )
 
-PLACEMENT_ROWS = (
-    ("none", "southcentralus", "southcentralus", 157, 0.014, 206, 2.41),
-    ("us", "us-east-1", "us-east-1", 291, 0.038, 323, 0.043),
-    ("us-east", "us-east-2", "us-east-1", 278, 0.037, 276, 0.036),
-    ("us-east-1", "us-east-1", "us-east-1", 321, 0.049, 315, 0.049),
-)
-
 # fmt: off
 INPUT_PATH_SECONDS = {
     "Volume warm unpinned": {
@@ -82,85 +75,6 @@ INPUT_PATH_SECONDS = {
 # fmt: on
 
 EXPECTED_GEOMEANS = (2.28, 4.23, 31.76)
-
-PLACEMENT_QUERY_SECONDS = {
-    "none -> southcentralus/europe-west1": INPUT_PATH_SECONDS["Volume warm unpinned"],
-    "us -> us-east-1": {
-        1: 4.705,
-        2: 0.460,
-        3: 10.517,
-        4: 5.391,
-        5: 4.088,
-        6: 1.450,
-        7: 9.546,
-        8: 4.815,
-        9: 11.843,
-        10: 4.564,
-        11: 1.026,
-        12: 2.701,
-        13: 6.714,
-        14: 2.922,
-        15: 2.314,
-        16: 1.358,
-        17: 2.490,
-        18: 7.973,
-        19: 3.429,
-        20: 6.079,
-        21: 33.451,
-        22: 2.576,
-    },
-    "us-east -> us-east-2": {
-        1: 4.487,
-        2: 0.459,
-        3: 9.350,
-        4: 6.162,
-        5: 4.074,
-        6: 1.361,
-        7: 9.842,
-        8: 4.850,
-        9: 11.213,
-        10: 5.320,
-        11: 1.143,
-        12: 2.455,
-        13: 7.335,
-        14: 2.073,
-        15: 1.982,
-        16: 1.188,
-        17: 2.610,
-        18: 8.903,
-        19: 3.215,
-        20: 6.364,
-        21: 30.083,
-        22: 2.488,
-    },
-    "us-east-1 -> us-east-1": {
-        1: 5.290,
-        2: 0.613,
-        3: 13.408,
-        4: 6.541,
-        5: 4.607,
-        6: 1.703,
-        7: 9.688,
-        8: 5.342,
-        9: 11.950,
-        10: 4.915,
-        11: 1.163,
-        12: 2.749,
-        13: 8.279,
-        14: 2.249,
-        15: 2.381,
-        16: 1.306,
-        17: 2.607,
-        18: 10.270,
-        19: 3.428,
-        20: 6.005,
-        21: 34.157,
-        22: 2.525,
-    },
-}
-
-EXPECTED_PLACEMENT_QUERY_GEOMEANS = (2.28, 3.92, 3.83, 4.23)
-PLACEMENT_QUERY_COLORS = (COLORS[0], "#6f78df", COLORS[1], COLORS[2])
 
 
 def chart_title(ax, heading: str, subheading: str) -> None:
@@ -223,56 +137,6 @@ def input_path_chart() -> Path:
     return path
 
 
-def placement_queries_chart() -> Path:
-    """Compare each query across warm Volume placement selectors."""
-    geomeans = []
-    for index, seconds in enumerate(PLACEMENT_QUERY_SECONDS.values()):
-        geomean = math.exp(sum(math.log(value) for value in seconds.values()) / 22)
-        assert round(geomean, 2) == EXPECTED_PLACEMENT_QUERY_GEOMEANS[index]
-        geomeans.append(geomean)
-
-    fig, ax = plt.subplots(figsize=(7.4, 3.5))
-    width = 0.18
-    slots = [*range(22), 23]
-    for index, (label, seconds) in enumerate(PLACEMENT_QUERY_SECONDS.items()):
-        values = [seconds[query] for query in range(1, 23)] + [geomeans[index]]
-        positions = [slot + (index - 1.5) * width for slot in slots]
-        ax.bar(
-            positions,
-            values,
-            width=width,
-            color=PLACEMENT_QUERY_COLORS[index],
-            label=label,
-            zorder=2,
-        )
-    ax.axvline(22, color="#d5d8e0", linewidth=1, zorder=1)
-    ax.set_yscale("log")
-    ax.set_ylim(0.2, 100)
-    ax.set_xticks(
-        slots,
-        [f"q{query}" for query in range(1, 23)] + ["geomean"],
-        fontsize=7,
-    )
-    ax.set_yticks([1, 10, 100], ["1s", "10s", "100s"])
-    ax.grid(axis="y", color="#eceef3", zorder=1)
-    chart_title(
-        ax,
-        "Warm Volume query time by placement",
-        "scale factor 100, 4 CPU / 16 GiB, log scale",
-    )
-    ax.legend(
-        frameon=False,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.13),
-        ncols=2,
-        fontsize=7,
-    )
-    path = OUT_DIR / "placement-queries.png"
-    fig.savefig(path, bbox_inches="tight")
-    plt.close(fig)
-    return path
-
-
 def read_speed_chart() -> Path:
     """Show the measured whole-dataset read speed for each input path."""
     fig, ax = plt.subplots(figsize=(6.8, 2.7))
@@ -308,61 +172,6 @@ def read_speed_chart() -> Path:
     )
     ax.legend(frameon=False, loc="lower right", fontsize=8)
     path = OUT_DIR / "read-speed.png"
-    fig.savefig(path, bbox_inches="tight")
-    plt.close(fig)
-    return path
-
-
-def placement_chart() -> Path:
-    """Compare warm and cold Volume suite wall time across selectors."""
-    fig, ax = plt.subplots(figsize=(6.8, 3.1))
-    positions = list(range(len(PLACEMENT_ROWS)))
-    width = 0.32
-    for offset, wall_index, cost_index, landed_index, color, label in (
-        (-width / 2, 3, 4, 1, COLORS[0], "warm"),
-        (width / 2, 5, 6, 2, COLORS[1], "cold"),
-    ):
-        bars = ax.barh(
-            [position + offset for position in positions],
-            [row[wall_index] for row in PLACEMENT_ROWS],
-            height=width,
-            color=color,
-            label=label,
-            zorder=2,
-        )
-        for bar, row in zip(bars, PLACEMENT_ROWS):
-            cost = row[cost_index]
-            ax.text(
-                row[wall_index] + 6,
-                bar.get_y() + bar.get_height() / 2,
-                f"{row[landed_index]} ${cost:.3f}"
-                if cost < 1
-                else f"{row[landed_index]} ${cost:.2f}",
-                va="center",
-                fontsize=8,
-            )
-    ax.set_yticks(
-        positions,
-        [requested for requested, *_ in PLACEMENT_ROWS],
-        fontsize=8,
-    )
-    ax.invert_yaxis()
-    ax.set_xlim(0, 390)
-    ax.set_xlabel("wall seconds")
-    ax.grid(axis="x", color="#eceef3", zorder=1)
-    chart_title(
-        ax,
-        "Warm and cold Volume suite by placement",
-        "scale factor 100, 4 CPU / 16 GiB, landed region and cost labelled",
-    )
-    ax.legend(
-        frameon=False,
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.16),
-        ncols=2,
-        fontsize=8,
-    )
-    path = OUT_DIR / "placement.png"
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
     return path
@@ -436,59 +245,6 @@ def cost_chart() -> Path:
     return path
 
 
-def cumulative_cost_chart() -> Path:
-    """Compare modeled cost over ten repeated suite runs."""
-    runs = list(range(1, 11))
-    volume = [0.0130 + run * 0.0138 for run in runs]
-    pinned_s3 = [run * 0.301 for run in runs]
-    unpinned_s3 = [run * 31.32 for run in runs]
-
-    fig, ax = plt.subplots(figsize=(6.6, 3.0))
-    lines = (
-        (volume, COLORS[0], "pinned fill, then unpinned Volume"),
-        (pinned_s3, COLORS[1], "pinned s3://"),
-        (unpinned_s3, COLORS[2], "unpinned s3://"),
-    )
-    for values, color, label in lines:
-        ax.plot(runs, values, color=color, linewidth=2, label=label, zorder=3)
-        ax.text(10.15, values[-1], label, color=color, va="center", fontsize=7)
-    ax.set_yscale("log")
-    ax.set_xlim(1, 16)
-    ax.set_ylim(0.01, 500)
-    ax.set_xticks(runs)
-    ax.set_xlabel("suite runs")
-    ax.set_yticks(
-        [0.01, 0.1, 1, 10, 100],
-        ["$0.01", "$0.10", "$1", "$10", "$100"],
-    )
-    ax.set_ylabel("cumulative cost, dollars")
-    ax.grid(axis="y", color="#eceef3", zorder=1)
-    ax.text(
-        0.03,
-        0.04,
-        "Volume storage of $2.22/month is not included in the line.",
-        transform=ax.transAxes,
-        fontsize=7,
-        color="#525866",
-    )
-    chart_title(
-        ax,
-        "Cumulative cost over repeated suite runs",
-        "modeled values, log scale",
-    )
-    path = OUT_DIR / "cumulative-cost.png"
-    fig.savefig(path, bbox_inches="tight")
-    plt.close(fig)
-    return path
-
-
 if __name__ == "__main__":
-    for chart in (
-        read_speed_chart(),
-        placement_chart(),
-        placement_queries_chart(),
-        cost_chart(),
-        input_path_chart(),
-        cumulative_cost_chart(),
-    ):
+    for chart in (read_speed_chart(), input_path_chart(), cost_chart()):
         print(chart)
